@@ -25,7 +25,7 @@ pearson_out = [pearsonr(x_slice, y) for x_slice in X]
 coeff, p_vals = (np.array(ls) for ls in zip(*pearson_out))
 
 # benjamani hochberg procedure
-def arg_bh_test(p, q):
+def arg_bh_test(p, q=0.1):
     i = rankdata(p, method='ordinal')
     m = len(p)
     bh_crit = q * i / m
@@ -34,7 +34,16 @@ def arg_bh_test(p, q):
         cutoff_idx = np.max(np.where(p <= bh_crit))
     except ValueError:
         return np.array([])
-    return np.where(i <= i[cutoff_idx])
+    signif_idx = np.where(i <= i[cutoff_idx])[0]
+    return signif_idx[np.argsort(p_vals[signif_idx])]
 
-q = 0.10
-arg_bh_test(p_vals, q)
+q = 0.34
+signif_idx = arg_bh_test(p_vals, q)
+
+print('Part 1 - Table')
+fmt = '%10s (%11s), %4s | %5.2f (%5.3f)'
+for idx in signif_idx:
+    print(fmt % (all_data['Protein'][idx],
+                 all_data['Residue'][idx],
+                 all_data['Time_Point'][idx],
+                 coeff[idx], p_vals[idx]))
