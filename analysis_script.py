@@ -60,10 +60,11 @@ def plot_xy_axes():
     plt.plot(xy[1], xy[0], 'k-', zorder=0, linewidth=0.75)
 
 plt.style.use('seaborn-notebook')
-plt.figure(0)
+fignum = 0
+plt.figure(fignum, (20, 7))
 ax = plt.subplot(131)
-plt.scatter(XS[:, 0], XS[:, 1])
-plt.scatter(YS[:, 0], YS[:, 1])
+plt.scatter(XS[:, 0], XS[:, 1], label='Signal')
+plt.scatter(YS[:, 0], YS[:, 1], label='Response')
 for i, col in enumerate(cols):
     pos = (np.mean([XS[i, 0], YS[i, 0]]),
            np.mean([XS[i, 1], YS[i, 1]]))
@@ -72,6 +73,7 @@ for i, col in enumerate(cols):
                     va='center', ha='center',
                     bbox=dict(boxstyle='round', fc='w', lw=0.75))
 plot_xy_axes()
+ax.legend(loc='lower right', frameon=False)
 plt.xlabel("Principal Axis 1")
 plt.ylabel("Principal Axis 2")
 
@@ -90,31 +92,36 @@ plt.ylabel("Principal Axis 2")
 # Euclidean distance will give you values that are orthogonal to the response
 #  vector and that doesn't actually show association using these methods
 prod = np.dot(XL, YL.T).squeeze()
-prod_norm = abs(prod) / max(abs(prod))
-selects = np.where(prod_norm > 0.95)[0]
+prod_norm = np.power(prod, 2) / max(np.power(prod, 2))
+selects = np.where(prod_norm > 0.90)[0]
+selects = selects[np.argsort(prod_norm[selects])[::-1]]
 ax = plt.subplot(133)
 plt.scatter(XL[selects, 0], XL[selects, 1])
 plt.scatter(YL[:, 0], YL[:, 1])
-print('\n')
-nudge = {0: (60, -55),
-         1: (0, -25),
-         2: (0, 25),
-         3: (10, -30),
-         4: (0, 25),
-         5: (0, -5),
-         6: (50, 35),
-         7: (0, 15),
-         8: (0, -3),
-         9: (0, 30),
-         10: (0, 20)
-         }
+plt.autoscale(False)
+plt.scatter(XL[:, 0], XL[:, 1], alpha=0.1, c='k',
+            zorder=0.5)
+print('\nPart-2: Partial Least Squares Regression')
+nudge = {'An A2, 10m': (50, -55),
+         'An A2, 30m': (0, -25),
+         'EGFR, 0m': (0, 25),
+         'Erbin, 5m': (10, -35),
+         'Erbin, 10m': (0, 25),
+         'Erbin, 30m': (-10, -5),
+         'HER2, 5m': (50, 30),
+         'HER2, 10m': (0, 15),
+         'HER2, 30m': (-25, 0),
+         'IGF1R, 5m': (0, 30),
+         'ephrin-B2, 10m': (0, 20),
+         'EphB1, 5m': (0, 15)}
 for i, s in enumerate(selects):
-    description = '(%d) %s-%s' % (i ,
+    key = '%s, %s' % (all_data['Protein'][s],
+                      all_data['Time_Point'][s])
+    description = '(%d) %s-%s' % (i + 1,
                                   all_data['Protein'][s],
                                   all_data['Time_Point'][s])
-    print(description)
+    n = nudge.get(key, (0, 0))
     pos = (XL[s, 0], XL[s, 1])
-    n = nudge.get(i, (0, 0))
     offset = (-25 + n[0], -15 + n[1])
     ax.annotate(description,
                 xy=pos,
@@ -128,4 +135,20 @@ for i, s in enumerate(selects):
 plot_xy_axes()
 plt.xlabel("Principal Axis 1")
 plt.ylabel("Principal Axis 2")
+plt.savefig('figures/plsr.png', transparent=True)
+plt.show()
+
+# calulate a prediction using only the first two principle components
+prediction = np.dot(XS[:, 0:2], XL[:, 0:2].T)
+fignum = fignum + 1
+plt.figure(fignum, (8, 8))
+for x_real, x_pred, col_name in zip(Xt, prediction, cols):
+    plt.scatter(x_real, x_pred, label=col_name, alpha=0.8)
+plot_xy_axes()
+plt.plot(np.arange(-100, 100), np.arange(-100, 100), ':',
+         c='k', alpha=0.5, zorder=0)
+plt.xlabel('Observed Value')
+plt.ylabel('Predicted Value')
+plt.legend(frameon=False)
+plt.savefig('figures/plsr_predict.png', transparent=True)
 plt.show()
