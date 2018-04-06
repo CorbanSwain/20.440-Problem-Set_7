@@ -5,6 +5,7 @@
 import numpy as np
 from scipy.stats import pearsonr, zscore
 from sklearn.cross_decomposition import PLSRegression
+from sklearn.linear_model import Lasso
 import matplotlib.pyplot as plt
 import os
 
@@ -35,12 +36,17 @@ cutoff = 0.95
 select = np.where(rsq > cutoff)[0]
 select_sorted = select[np.argsort(rsq[select])[::-1]]
 
+
+def list_coeff(idxs, coeff):
+    fmt = '%2s  |  %10s, %3s  |  %5.3f'
+    for i, idx in enumerate(idxs):
+        print(fmt % (i+1, all_data['Protein'][idx],
+                     all_data['Time_Point'][idx], coeff[idx]))
+
+
 # print the identified conditions
 print('Part 1 - Highest Pearson Correlation Coeff.')
-fmt = '%2s  |  %10s  |  %5.3f'
-for i, idx in enumerate(select_sorted):
-    print(fmt % (i+1, all_data['Protein'][idx],
-                 coeff[idx]))
+list_coeff(select_sorted, coeff)
 
 # Part 2 - Partial Least Squares Regression
 Yt = zscore(Y.reshape((-1, 4)).T)
@@ -50,11 +56,22 @@ pls.fit(Xt, Yt)
 XS, XL, YS, YL = (pls.x_scores_, pls.x_loadings_,
                   pls.y_scores_, pls.y_loadings_)
 
-xy = (np.arange(-100, 100) * 0, np.arange(-100, 100))
+
+# RE: the "strongly associated subset" in problem 2b, TAs have said that
+# instead  of measuring proximity to the response using Euclidean distance,
+# instead find the dot product of each signal and the response point and pick
+#  the values with the highest magnitude (positive or negative), because
+# Euclidean distance will give you values that are orthogonal to the response
+#  vector and that doesn't actually show association using these methods
+prod = np.dot(XL, YL.T).squeeze()
+prod_norm = np.power(prod, 2) / max(np.power(prod, 2))
+selects = np.where(prod_norm > 0.90)[0]
+selects = selects[np.argsort(prod_norm[selects])[::-1]]
 
 
 def plot_xy_axes():
     """Plots the lines x=0 and y=0 in black."""
+    xy = (np.arange(-100, 100) * 0, np.arange(-100, 100))
     plt.autoscale(False)
     plt.plot(xy[0], xy[1], 'k-', zorder=0, linewidth=0.75)
     plt.plot(xy[1], xy[0], 'k-', zorder=0, linewidth=0.75)
@@ -64,7 +81,8 @@ fignum = 0
 plt.figure(fignum, (20, 7))
 ax = plt.subplot(131)
 plt.scatter(XS[:, 0], XS[:, 1], label='Signal')
-plt.scatter(YS[:, 0], YS[:, 1], label='Response')
+plt.scatter(YS[:, 0], YS[:, 1], marker='*', s=10 ** 2,
+            label='Response')
 for i, col in enumerate(cols):
     pos = (np.mean([XS[i, 0], YS[i, 0]]),
            np.mean([XS[i, 1], YS[i, 1]]))
@@ -78,26 +96,17 @@ plt.xlabel("Principal Axis 1")
 plt.ylabel("Principal Axis 2")
 
 ax = plt.subplot(132)
-plt.scatter(XL[:, 0], XL[:, 1])
-plt.scatter(YL[:, 0], YL[:, 1])
+plt.scatter(XL[:, 0], XL[:, 1], c=-prod, cmap='coolwarm', linewidths=0.5,
+            edgecolors='k')
+plt.scatter(YL[:, 0], YL[:, 1], marker='*', s=10 ** 2, c='C1')
 plot_xy_axes()
 plt.xlabel("Principal Axis 1")
 plt.ylabel("Principal Axis 2")
 
 
-# RE: the "strongly associated subset" in problem 2b, TAs have said that
-# instead  of measuring proximity to the response using Euclidean distance,
-# instead find the dot product of each signal and the response point and pick
-#  the values with the highest magnitude (positive or negative), because
-# Euclidean distance will give you values that are orthogonal to the response
-#  vector and that doesn't actually show association using these methods
-prod = np.dot(XL, YL.T).squeeze()
-prod_norm = np.power(prod, 2) / max(np.power(prod, 2))
-selects = np.where(prod_norm > 0.90)[0]
-selects = selects[np.argsort(prod_norm[selects])[::-1]]
 ax = plt.subplot(133)
 plt.scatter(XL[selects, 0], XL[selects, 1])
-plt.scatter(YL[:, 0], YL[:, 1])
+plt.scatter(YL[:, 0], YL[:, 1], marker='*', s=10 ** 2)
 plt.autoscale(False)
 plt.scatter(XL[:, 0], XL[:, 1], alpha=0.1, c='k',
             zorder=0.5)
@@ -114,6 +123,7 @@ nudge = {'An A2, 10m': (50, -55),
          'IGF1R, 5m': (0, 30),
          'ephrin-B2, 10m': (0, 20),
          'EphB1, 5m': (0, 15)}
+list_coeff(selects, prod)
 for i, s in enumerate(selects):
     key = '%s, %s' % (all_data['Protein'][s],
                       all_data['Time_Point'][s])
@@ -141,7 +151,8 @@ plt.show()
 # calulate a prediction using only the first two principle components
 prediction = np.dot(XS[:, 0:2], XL[:, 0:2].T)
 fignum = fignum + 1
-plt.figure(fignum, (8, 8))
+plt.figure(fignum, (17, 8))
+plt.subplot(121)
 for x_real, x_pred, col_name in zip(Xt, prediction, cols):
     plt.scatter(x_real, x_pred, label=col_name, alpha=0.8)
 plot_xy_axes()
@@ -150,5 +161,40 @@ plt.plot(np.arange(-100, 100), np.arange(-100, 100), ':',
 plt.xlabel('Observed Value')
 plt.ylabel('Predicted Value')
 plt.legend(frameon=False)
+
+plt.subplot(122)
+prediction = np.dot(YS[:, 0:2], YL[:, 0:2].T)
+for y_real, y_pred, col_name in zip(Yt, prediction, cols):
+    plt.scatter(y_real, y_pred, label=col_name, alpha=0.8, s=10 ** 2)
+plot_xy_axes()
+plt.plot(np.arange(-100, 100), np.arange(-100, 100), ':',
+         c='k', alpha=0.5, zorder=0)
+plt.xlabel('Observed Value')
+plt.ylabel('Predicted Value')
 plt.savefig('figures/plsr_predict.png', transparent=True)
+plt.show()
+
+# Part 3 - LASSO
+lambdas = [1, 1e-1, 1e-2, 1e-3]
+fignum = fignum + 1
+plt.figure(fignum, (6, 6))
+for lmda in lambdas:
+    lasso = Lasso(alpha=lmda, selection='random',
+                  max_iter=1e5, normalize=True)
+    lasso.fit(X.T, Y)
+    Y_pred = lasso.predict(X.T)
+    plt.scatter(Y, Y_pred, label=('= %.3f' % lmda).rstrip('0').rstrip('.'),
+                alpha=0.9, s=10 ** 2)
+    non_zero_selects = np.where(abs(lasso.coef_) > 1e-10)[0]
+    non_zero_selects = \
+        non_zero_selects[np.argsort(abs(lasso.coef_[non_zero_selects]))[::-1]]
+    print('\nLasso with lambda = %1.0E' % lmda)
+    list_coeff(non_zero_selects, lasso.coef_)
+plot_xy_axes()
+plt.plot(np.arange(-100, 100), np.arange(-100, 100), ':',
+         c='k', alpha=0.5, zorder=0)
+plt.legend(frameon=False, title='Lambda')
+plt.xlabel('Observed Value')
+plt.ylabel('Predicted Value')
+plt.savefig('figures/lasso.png', transparent=True)
 plt.show()
